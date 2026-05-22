@@ -1,0 +1,25 @@
+.main {
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-image: url("https://static.vecteezy.com/system/resources/previews/061/902/778/non_2x/chatbot-chatbot-assistant-app-smart-assistant-ai-artificial-intelligence-technology-concept-background-with-circuit-board-connections-and-tech-icons-hand-pressing-button-illustration-vector.jpg");
+
+    .chat-window {
+        height: -webkit-fill-available;
+        padding: 100px 250px;
+
+        .chat {
+            width: 450px;
+            height: 100%;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    }
+}
