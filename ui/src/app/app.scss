@@ -65,24 +65,39 @@
             }
 
             .chat-item {
-                margin-bottom: 6px;
+                padding: 8px 10px;
                 color: #898989;
                 display: flex;
                 justify-content: space-between;
+                position: relative;
+                left: -10px;
 
                 a {
                     cursor: pointer;
 
                     &.active {
-                        color: #467c7c;
+                        color: #6fc0bf;
                     }
                 }
 
                 .chat-remove {
                     color: #898989;
                 }
+
+                &:hover {
+                    background: #181818;
+                    border-radius: 8px;
+                }
             }
         }
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
     }
 
     .panel-chat {
@@ -125,7 +140,7 @@
 
                     &.bot {
                         align-self: flex-start;
-                        background: #1e3232;
+                        background: #4d4835;
                         color: #f3f3f3;
                     }
                 }
@@ -142,6 +157,10 @@
                 .p-button {
                     padding: 0;
                     width: auto;
+
+                    .pi {
+                        font-size: 18px;
+                    }
                 }
 
                 .btns {

@@ -2,8 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
+import mongoose from 'mongoose';
+import Conversation from './models/conversation.js';
 
 dotenv.config();
+
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('MongoDB connected');
+  })
+  .catch(err => {
+    console.error(err);
+  });
 
 if (!process.env.GROQ_API_KEY) {
   throw new Error('GROQ_API_KEY is missing in .env');
@@ -25,31 +35,59 @@ const openai = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-const conversations = new Map();
-
 app.get('/', (req, res) => {
   res.json({
     status: 'AI Chat Backend Running'
   });
 });
 
-app.get('/api/model', (req, res) => {
-  res.json({
-    model: MODEL
-  });
-});
+app.get('/api/chat/:conversationId', async (req, res) => {
 
-app.get('/api/chat/:conversationId', (req, res) => {
-
-  const { conversationId } = req.params;
-
-  const messages =
-    conversations.get(conversationId) || [];
+  const conversation =
+    await Conversation.findOne({
+      conversationId: req.params.conversationId
+    });
 
   res.json({
-    messages
+    messages:
+      conversation?.messages || []
   });
+
 });
+
+app.get('/api/chats', async (req, res) => {
+
+  try {
+
+    const chats =
+      await Conversation.find()
+        .sort({ updatedAt: -1 });
+
+    res.json(chats);
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    });
+
+  }
+
+});
+
+app.delete('/api/chat/:conversationId',
+  async (req, res) => {
+
+    await Conversation.deleteOne({
+      conversationId:
+        req.params.conversationId
+    });
+
+    res.json({
+      success: true
+    });
+
+  });
 
 app.post('/api/chat', async (req, res) => {
   try {
@@ -64,10 +102,16 @@ app.post('/api/chat', async (req, res) => {
 
     const chatId = conversationId || 'default';
 
-    // history
-    let messages = conversations.get(chatId) || [];
+    const conversation =
+      await Conversation.findOne({
+        conversationId: chatId
+      });
 
-    // system prompt
+    let messages = (conversation?.messages || []).map(({ role, content }) => ({
+      role,
+      content
+    }));
+
     if (messages.length === 0) {
       messages.push({
         role: 'system',
@@ -78,24 +122,22 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // user message
     messages.push({
       role: 'user',
       content: message
     });
 
-    // OpenAI request
     const completion = await openai.chat.completions.create({
       model: MODEL,
       messages,
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 2000,
+      frequency_penalty: 0.2,
     });
 
     const assistantReply =
       completion.choices[0].message.content;
 
-    // save assistant response
     messages.push({
       role: 'assistant',
       content: assistantReply
@@ -108,8 +150,25 @@ app.post('/api/chat', async (req, res) => {
       ];
     }
 
-    // save conversation
-    conversations.set(chatId, messages);
+    const title =
+      conversation?.title ||
+      message.substring(0, 50);
+
+    const savedConversation = await Conversation.findOneAndUpdate(
+      {
+        conversationId: chatId
+      },
+      {
+        conversationId: chatId,
+        title: conversation?.title || message.substring(0, 50),
+        model: MODEL,
+        messages
+      },
+      {
+        upsert: true,
+        returnDocument: 'after'
+      }
+    );
 
     res.json({
       success: true,
@@ -129,19 +188,6 @@ app.post('/api/chat', async (req, res) => {
       error: 'AI request failed'
     });
   }
-});
-
-app.delete('/api/chat/:conversationId', (req, res) => {
-
-  const { conversationId } = req.params;
-
-  const deleted =
-    conversations.delete(conversationId);
-
-  res.json({
-    success: deleted
-  });
-
 });
 
 app.listen(PORT, () => {

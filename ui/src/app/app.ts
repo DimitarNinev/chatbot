@@ -1,10 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { RouterOutlet } from "@angular/router";
 import { PickerComponent } from '@ctrl/ngx-emoji-mart';
-import { ChangeDetectorRef } from '@angular/core';
 import { ViewChild, ElementRef, HostListener } from '@angular/core';
 import { SplitterModule } from 'primeng/splitter';
 import { ButtonModule } from 'primeng/button';
@@ -37,7 +36,6 @@ interface Chat {
   styleUrl: './app.scss'
 })
 export class App implements OnInit {
-  currentModel: string | null = null;
 
   @ViewChild('messagesContainer')
   messagesContainer!: ElementRef;
@@ -58,113 +56,105 @@ export class App implements OnInit {
 
   activeChatId = '';
 
+  hasActiveChat = false;
+
   constructor(
     private http: HttpClient,
     private cdr: ChangeDetectorRef
-  ) {
-    this.createNewChat();
-  }
+  ) { }
 
   ngOnInit() {
-    this.http
-      .get<any>('http://localhost:3000/api/model')
-      .subscribe(res => {
-        this.currentModel = res.model;
-        this.cdr.detectChanges();
-      });
+    this.loadChats();
   }
 
   createNewChat() {
-
     const id = crypto.randomUUID();
 
     this.activeChatId = id;
-
+    this.hasActiveChat = true;
     this.messages = [];
 
     this.chats = [
-      {
-        id,
-        title: 'New Chat'
-      },
+      { id, title: 'New Chat' },
       ...this.chats
     ];
   }
 
-  deleteChat(chatId: string) {
+  loadChats() {
+    this.http
+      .get<any[]>('http://localhost:3000/api/chats')
+      .subscribe(chats => {
+        this.chats = chats.map(chat => ({
+          id: chat.conversationId,
+          title: chat.title || 'New Chat'
+        }));
 
+        this.cdr.detectChanges();
+      });
+  }
+
+  selectChat(chatId: string) {
+    this.activeChatId = chatId;
+    this.hasActiveChat = true;
+    this.loadChat(chatId);
+  }
+
+  deleteChat(chatId: string) {
     this.http.delete(
       `http://localhost:3000/api/chat/${chatId}`
     ).subscribe(() => {
-
-      this.chats = this.chats.filter(
-        chat => chat.id !== chatId
-      );
-
-      this.cdr.detectChanges();
-
-      if (this.activeChatId === chatId) {
-
-        if (this.chats.length > 0) {
-
-          this.loadChat(this.chats[0].id);
-
-        } else {
-
-          this.messages = [];
-          this.activeChatId = '';
-
-        }
-
-      }
-
+      this.onChatDeleted(chatId);
     });
+  }
 
+  onChatDeleted(chatId: string) {
+    this.chats = this.chats.filter(c => c.id !== chatId);
+
+    if (!this.chats.length) {
+      this.activeChatId = '';
+      this.hasActiveChat = false;
+      this.messages = [];
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.selectChat(this.chats[0].id);
+    this.cdr.detectChanges();
   }
 
   scrollToBottom(): void {
-
     setTimeout(() => {
-
       this.messagesContainer.nativeElement.scrollTop =
         this.messagesContainer.nativeElement.scrollHeight;
-
     }, 0);
   }
 
   loadChat(chatId: string) {
-
     setTimeout(() => {
-
       this.activeChatId = chatId;
+    });
 
-      this.http.get<any>(
-        `http://localhost:3000/api/chat/${chatId}`
-      ).subscribe(res => {
-        console.log(res)
-
-        this.messages = res.messages.filter(
-          (msg: any) => msg.role !== 'system'
-        );
-
-        this.scrollToBottom();
-
-        this.cdr.detectChanges();
-
-      });
-
+    this.http.get<any>(
+      `http://localhost:3000/api/chat/${chatId}`
+    ).subscribe(res => {
+      this.messages = res.messages
+        .filter((msg: any) => msg.role !== 'system')
+        .map((msg: any) => ({
+          role: msg.role ?? 'assistant',
+          content: msg.content ?? ''
+        }));
+      this.cdr.detectChanges();
+      this.scrollToBottom();
     });
 
   }
 
   sendMessage() {
-
     if (this.showEmojiPicker) { this.showEmojiPicker = false };
 
     if (!this.inputMessage.trim()) return;
 
     const userMessage = this.inputMessage;
-
     this.messages = [
       ...this.messages,
       {
@@ -174,7 +164,6 @@ export class App implements OnInit {
     ];
 
     if (this.messages.length === 1) {
-
       this.chats = this.chats.map(chat =>
         chat.id === this.activeChatId
           ? {
@@ -183,7 +172,6 @@ export class App implements OnInit {
           }
           : chat
       );
-
     }
 
     this.scrollToBottom();
@@ -200,7 +188,6 @@ export class App implements OnInit {
       }
     ).subscribe({
       next: (res) => {
-
         this.messages = [
           ...this.messages,
           {
@@ -209,11 +196,11 @@ export class App implements OnInit {
           }
         ];
 
-        this.scrollToBottom();
-
         this.loading = false;
 
         this.cdr.detectChanges();
+
+        this.scrollToBottom();
       },
 
       error: (err) => {
