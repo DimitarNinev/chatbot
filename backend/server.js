@@ -35,6 +35,12 @@ const openai = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
+app.get('/api/model', (req, res) => {
+  res.json({
+    model: MODEL
+  });
+});
+
 app.get('/', (req, res) => {
   res.json({
     status: 'AI Chat Backend Running'
@@ -54,6 +60,33 @@ app.get('/api/chat/:conversationId', async (req, res) => {
   });
 
 });
+
+const SYSTEM_PROMPT = `
+                        You are a professional AI assistant.
+
+                        IMPORTANT FORMATTING RULES:
+
+                        - Always answer in Markdown.
+                        - Use headings when appropriate.
+                        - Use bullet lists for enumerations.
+                        - Use numbered lists for steps.
+                        - Separate ideas into paragraphs.
+                        - Never write large walls of text.
+                        - Never return plain text lists separated only by commas.
+                        - Format recipes, instructions and explanations with clear structure.
+
+                        Answer in the same language as the user.
+                      `
+;
+
+const SYSTEM_TITLE_PROMPT = `
+                              Generate a chat title.
+                              Max 5 words.
+                              Return only the title.
+                              Use same language.
+                              No punctuation.
+                            `
+;
 
 app.get('/api/chats', async (req, res) => {
 
@@ -89,6 +122,43 @@ app.delete('/api/chat/:conversationId',
 
   });
 
+async function generateChatTitle(userMessage, assistantReply) {
+  try {
+
+    const titleCompletion =
+      await openai.chat.completions.create({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: SYSTEM_TITLE_PROMPT
+          },
+          {
+            role: 'user',
+            content: `
+                      User:
+                      ${userMessage}
+
+                      Assistant:
+                      ${assistantReply}
+                     `
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 20
+      });
+
+    return titleCompletion.choices[0].message.content.trim();
+
+  } catch (error) {
+
+    console.error('TITLE ERROR:', error);
+
+    return userMessage.substring(0, 40);
+
+  }
+}
+
 app.post('/api/chat', async (req, res) => {
   try {
 
@@ -107,20 +177,18 @@ app.post('/api/chat', async (req, res) => {
         conversationId: chatId
       });
 
-    let messages = (conversation?.messages || []).map(({ role, content }) => ({
-      role,
-      content
-    }));
-
-    if (messages.length === 0) {
-      messages.push({
+    let messages = [
+      {
         role: 'system',
-        content: `
-          You are a helpful AI assistant.
-          Reply clearly and naturally.
-        `
-      });
-    }
+        content: SYSTEM_PROMPT
+      },
+      ...(conversation?.messages || [])
+        .filter(m => m.role !== 'system')
+        .map(({ role, content }) => ({
+          role,
+          content
+        }))
+    ];
 
     messages.push({
       role: 'user',
@@ -138,6 +206,21 @@ app.post('/api/chat', async (req, res) => {
     const assistantReply =
       completion.choices[0].message.content;
 
+    let title =
+      conversation?.title || 'New Chat';
+
+    const isNewConversation =
+      !conversation;
+
+    if (isNewConversation) {
+
+      title = await generateChatTitle(
+        message,
+        assistantReply
+      );
+
+    }
+
     messages.push({
       role: 'assistant',
       content: assistantReply
@@ -150,17 +233,13 @@ app.post('/api/chat', async (req, res) => {
       ];
     }
 
-    const title =
-      conversation?.title ||
-      message.substring(0, 50);
-
     const savedConversation = await Conversation.findOneAndUpdate(
       {
         conversationId: chatId
       },
       {
         conversationId: chatId,
-        title: conversation?.title || message.substring(0, 50),
+        title,
         model: MODEL,
         messages
       },

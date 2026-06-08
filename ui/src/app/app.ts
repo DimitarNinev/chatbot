@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
@@ -8,6 +8,9 @@ import { ViewChild, ElementRef, HostListener } from '@angular/core';
 import { SplitterModule } from 'primeng/splitter';
 import { ButtonModule } from 'primeng/button';
 import { TextareaModule } from 'primeng/textarea';
+import { ConfirmPopupModule } from 'primeng/confirmpopup';
+import { ConfirmationService } from 'primeng/api';
+import { MarkdownModule } from 'ngx-markdown';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -30,12 +33,18 @@ interface Chat {
     PickerComponent,
     SplitterModule,
     ButtonModule,
-    TextareaModule
+    TextareaModule,
+    ConfirmPopupModule,
+    MarkdownModule
+  ],
+  providers: [
+    ConfirmationService
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
 export class App implements OnInit {
+  model: string = '';
 
   @ViewChild('messagesContainer')
   messagesContainer!: ElementRef;
@@ -58,13 +67,28 @@ export class App implements OnInit {
 
   hasActiveChat = false;
 
+  private confirmationService = inject(ConfirmationService);
+
+  popupOpenFor: string | null = null;
+
+  isToggle: boolean = false;
+
   constructor(
     private http: HttpClient,
     private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit() {
-    this.loadChats();
+    this.getChats();
+    this.getModel();
+  }
+
+  getModel() {
+    this.http.get<any>(
+      `http://localhost:3000/api/model`
+    ).subscribe(res => {
+      this.model = res.model;
+    });
   }
 
   createNewChat() {
@@ -80,7 +104,7 @@ export class App implements OnInit {
     ];
   }
 
-  loadChats() {
+  getChats() {
     this.http
       .get<any[]>('http://localhost:3000/api/chats')
       .subscribe(chats => {
@@ -94,6 +118,7 @@ export class App implements OnInit {
   }
 
   selectChat(chatId: string) {
+    this.isToggle = false;
     this.activeChatId = chatId;
     this.hasActiveChat = true;
     this.loadChat(chatId);
@@ -110,23 +135,41 @@ export class App implements OnInit {
   onChatDeleted(chatId: string) {
     this.chats = this.chats.filter(c => c.id !== chatId);
 
-    if (!this.chats.length) {
-      this.activeChatId = '';
-      this.hasActiveChat = false;
-      this.messages = [];
-      this.cdr.detectChanges();
-      return;
-    }
-
-    this.selectChat(this.chats[0].id);
+    // if (!this.chats.length) {
+    this.activeChatId = '';
+    this.hasActiveChat = false;
+    this.messages = [];
     this.cdr.detectChanges();
+    //   return;
+    // }
+
+    // this.selectChat(this.chats[0].id);
+    // this.cdr.detectChanges();
   }
 
-  scrollToBottom(): void {
-    setTimeout(() => {
-      this.messagesContainer.nativeElement.scrollTop =
-        this.messagesContainer.nativeElement.scrollHeight;
-    }, 0);
+  confirmChatDelete(chatId: string, event: Event) {
+    this.popupOpenFor = chatId;
+    this.confirmationService.confirm({
+      target: event.currentTarget as EventTarget,
+      message: 'Do you want to delete this chat?',
+      rejectButtonProps: {
+        label: 'Cancel',
+        severity: 'secondary',
+        outlined: true
+      },
+      acceptButtonProps: {
+        label: 'Remove',
+        severity: 'danger',
+        outlined: true
+      },
+      accept: () => {
+        this.deleteChat(chatId);
+        this.popupOpenFor = null;
+      },
+      reject: () => {
+        this.popupOpenFor = null;
+      }
+    });
   }
 
   loadChat(chatId: string) {
@@ -163,17 +206,6 @@ export class App implements OnInit {
       }
     ];
 
-    if (this.messages.length === 1) {
-      this.chats = this.chats.map(chat =>
-        chat.id === this.activeChatId
-          ? {
-            ...chat,
-            title: userMessage.slice(0, 30)
-          }
-          : chat
-      );
-    }
-
     this.scrollToBottom();
 
     this.inputMessage = '';
@@ -190,11 +222,12 @@ export class App implements OnInit {
       next: (res) => {
         this.messages = [
           ...this.messages,
-          {
-            role: 'assistant',
-            content: res.reply
-          }
+          { role: 'assistant', content: '' }
         ];
+
+        this.typeWriter(res.reply, this.messages.length - 1);
+
+        this.getChats();
 
         this.loading = false;
 
@@ -214,6 +247,29 @@ export class App implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  typeWriter(text: string, index: number) {
+    let i = 0;
+
+    const interval = setInterval(() => {
+      this.messages[index].content += text[i];
+      i++;
+
+      this.cdr.detectChanges();
+      this.scrollToBottom();
+
+      if (i >= text.length) {
+        clearInterval(interval);
+      }
+    }, 10);
+  }
+
+  scrollToBottom(): void {
+    setTimeout(() => {
+      this.messagesContainer.nativeElement.scrollTop =
+        this.messagesContainer.nativeElement.scrollHeight;
+    }, 0);
   }
 
   addEmoji(event: any) {

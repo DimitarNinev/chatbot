@@ -1,10 +1,10 @@
 <div class="card">
-  <p-splitter [panelSizes]="[20, 80]" [style]="{ height: '100vh' }">
-    <ng-template #panel>
-      <div class="panel-menu">
+  <div class="splitter-1">
+    <div class="panel-menu" [class.open]="isToggle">
+      <div class="header">
         <div class="avatar">
           <div class="img">
-            <svg width="50" height="50" viewBox="-14 0 284 284" version="1.1" xmlns="http://www.w3.org/2000/svg"
+            <svg class="svg-avatar" viewBox="-14 0 284 284" version="1.1" xmlns="http://www.w3.org/2000/svg"
               xmlns:xlink="http://www.w3.org/1999/xlink" preserveAspectRatio="xMidYMid" fill="#000000">
               <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
               <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
@@ -64,89 +64,111 @@
           </div>
         </div>
 
-        <div class="new-chat">
-          <!-- new chat button -->
-          <p-button severity="contrast" variant="outlined" label="New chat" aria-label="New chat"
-            (click)="createNewChat()" />
+        @if(isToggle) {
+        <a class="chat-remove" (click)="isToggle = !isToggle">
+          <i class="pi pi-times"></i>
+        </a>
+        }
+      </div>
+
+      <div class="new-chat">
+        <p-button severity="contrast" variant="outlined" label="New chat" aria-label="New chat"
+          (click)="createNewChat()" />
+      </div>
+
+      <div class="chat-history">
+        <h5>History</h5>
+        @for(chat of chats; track chat.id) {
+        <div class="chat-item" [class.popup-open]="popupOpenFor === chat.id">
+          <a [class.active]="chat.id === activeChatId" (click)="selectChat(chat.id)">
+            {{ chat.title }}
+          </a>
+
+          <p-confirmpopup />
+          <a class="chat-remove" (click)="confirmChatDelete(chat.id, $event); $event.stopPropagation()">
+            <i class="pi pi-trash"></i>
+          </a>
         </div>
+        }
+      </div>
+    </div>
 
-        <div class="chat-history">
-          <h5>History</h5>
-          @for(chat of chats; track chat.id) {
-          <div class="chat-item">
-            <a [class.active]="chat.id === activeChatId" (click)="selectChat(chat.id)">
-              {{ chat.title }}
-            </a>
+    <div class="model" [class.open]="isToggle">
+      <p>Model</p>
+      <p>{{model}}</p>
+    </div>
+  </div>
 
-            <a class="chat-remove" (click)="deleteChat(chat.id); $event.stopPropagation()">
-              x
-            </a>
+  <div class="splitter-gutter"></div>
+
+  <div class="splitter-2">
+    @if(!isToggle) {
+    <div class="menu-btn">
+      <p-button severity="contrast" variant="outlined" icon="pi pi-bars" aria-label="Toggle menu"
+        [class.open]="isToggle" (click)="isToggle = !isToggle" />
+    </div>
+    }
+
+    @if (!hasActiveChat) {
+    <div class="empty-state">
+      <h1>Start a new conversation or select a chat to continue.</h1>
+
+      <p-button severity="contrast" variant="outlined" label="New chat" icon="pi pi-external-link" iconPos="right"
+        aria-label="New chat" (click)="createNewChat()" />
+    </div>
+    } @else {
+    <div class="panel-chat">
+      <div class="chat">
+        <div class="messages" #messagesContainer>
+
+          @for(message of messages; track $index) {
+
+          @if (message.role === 'assistant') {
+          <div class="message bot">
+            <markdown [data]="message.content"></markdown>
           </div>
           }
+
+          @if (message.role === 'user') {
+          <div class="message user">
+            {{ message.content }}
+          </div>
+          }
+
+          }
+
+          @if(loading) {
+          <div class="message bot typing">
+            Typing...
+          </div>
+          }
+
         </div>
-      </div>
-    </ng-template>
 
-    <ng-template #panel>
-      @if (!hasActiveChat) {
-      <div class="empty-state">
-        <h1>Select a chat or start a new one</h1>
+        <div class="client-input">
+          <div class="btns">
+            <p-button icon="pi pi-face-smile" severity="secondary" variant="text" aria-label="Emoji"
+              (click)="toggleEmojiPicker($event)" />
 
-        <p-button severity="contrast" variant="outlined" label="New chat" icon="pi pi-external-link" iconPos="right"
-          aria-label="New chat" (click)="createNewChat()" />
-      </div>
-      } @else {
-      <div class="panel-chat">
-        <div class="chat">
-          <div class="messages" #messagesContainer>
-
-            @for(message of messages; track $index) {
-
-            <div class="message" [class.user]="message?.role === 'user'" [class.bot]="message?.role === 'assistant'">
-              {{ message?.content }}
+            <div class="emoji-wrapper" #emojiPicker>
+              @if(showEmojiPicker) {
+              <emoji-mart (emojiSelect)="addEmoji($event)" [showPreview]="false"></emoji-mart>
+              }
             </div>
-
-            }
-
-            @if(loading) {
-            <div class="message bot typing">
-              Typing...
-            </div>
-            }
-
           </div>
 
-          <div class="client-input">
-            <div class="btns">
-              <!-- attachment button -->
-              <p-button icon="pi pi-paperclip" severity="secondary" variant="text" aria-label="Upload" />
-
-              <!-- emoji button -->
-              <p-button icon="pi pi-face-smile" severity="secondary" variant="text" aria-label="Emoji"
-                (click)="toggleEmojiPicker($event)" />
-
-              <div class="emoji-wrapper" #emojiPicker>
-                @if(showEmojiPicker) {
-                <emoji-mart (emojiSelect)="addEmoji($event)" [showPreview]="false"></emoji-mart>
-                }
-              </div>
-            </div>
-
-            <div class="field">
-              <!-- text field -->
-              <textarea pTextarea class="client-text" [(ngModel)]="inputMessage" (keyup.enter)="sendMessage()"
-                [autoResize]="true" placeholder="Type here...">
+          <div class="field">
+            <textarea pTextarea class="client-text" [(ngModel)]="inputMessage" (keyup.enter)="sendMessage()"
+              [autoResize]="true" placeholder="Type here...">
               </textarea>
 
-              <!-- send button -->
-              <p-button class="btn-send" variant="text" icon="pi pi-send" aria-label="Send" (click)="sendMessage()" />
-            </div>
+            <p-button class="btn-send" variant="text" icon="pi pi-send" aria-label="Send" (click)="sendMessage()" />
           </div>
         </div>
       </div>
-      }
-    </ng-template>
-  </p-splitter>
+    </div>
+    }
+  </div>
 </div>
 
 <router-outlet>
